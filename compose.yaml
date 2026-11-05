@@ -1,0 +1,73 @@
+# Horizon robot workspace
+#
+#   robot  -> lean image. Runs on the Pi (and on the laptop for testing). No GUI, no Gazebo.
+#   sim    -> laptop only. Adds RViz + Gazebo Jetty. Has `profiles: [sim]`, so a plain
+#             `docker compose up` on the Pi will never start it.
+#
+# Folder layout on the host:
+#   src/robot/  -> packages that go on the real robot (drivers, URDF, Nav2 config, launch)
+#   src/sim/    -> simulation-only packages (Gazebo worlds, sim launch files)
+# The Pi only ever mounts src/robot, so sim code never gets built there.
+
+services:
+
+  robot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        BASE_IMAGE: ros:lyrical-ros-base
+    image: horizon/robot:lyrical
+    container_name: horizon-robot
+    network_mode: host          # ROS 2 discovery works across laptop <-> Pi
+    ipc: host                   # fast shared-memory transport between containers
+    privileged: true            # access to USB: lidar, VEX brain, OAK-D
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+    volumes:
+      - ./src/robot:/ws/src/robot
+      - /dev:/dev
+      - robot_build:/ws/build
+      - robot_install:/ws/install
+      - robot_log:/ws/log
+    stdin_open: true
+    tty: true
+    command: sleep infinity     # keep it running; open shells with `docker compose exec`
+
+  sim:
+    profiles: [sim]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        BASE_IMAGE: osrf/ros:lyrical-desktop-full
+        EXTRA_APT_PACKAGES: ros-lyrical-nav2-minimal-tb3-sim
+    image: horizon/sim:lyrical
+    container_name: horizon-sim
+    network_mode: host
+    ipc: host
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - DISPLAY=${DISPLAY:-:0}
+      - QT_X11_NO_MITSHM=1
+      - QT_QPA_PLATFORM=xcb
+    devices:
+      - /dev/dri:/dev/dri       # Intel graphics acceleration for Gazebo/RViz
+    volumes:
+      - ./src/robot:/ws/src/robot
+      - ./src/sim:/ws/src/sim
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - sim_build:/ws/build
+      - sim_install:/ws/install
+      - sim_log:/ws/log
+    stdin_open: true
+    tty: true
+    command: sleep infinity
+
+volumes:
+  robot_build:
+  robot_install:
+  robot_log:
+  sim_build:
+  sim_install:
+  sim_log:

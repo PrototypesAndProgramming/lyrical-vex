@@ -1,0 +1,17 @@
+#!/bin/bash
+# rbuild: install any missing dependencies your packages list, then build the workspace.
+# Usage (inside a container):  rbuild            -> build everything that's mounted
+#                              rbuild --packages-select my_pkg
+set -e
+cd /ws
+source "/opt/ros/${ROS_DISTRO}/setup.bash"
+
+echo ">> Installing dependencies from package.xml files..."
+sudo apt-get update -qq
+rosdep update --rosdistro "${ROS_DISTRO}" >/dev/null
+rosdep install --from-paths src --ignore-src -y -r --rosdistro "${ROS_DISTRO}"
+
+echo ">> Building..."
+colcon build --symlink-install "$@"
+
+echo ">> Done. Run:  source /ws/install/setup.bash   (or open a new shell)"
